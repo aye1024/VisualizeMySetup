@@ -509,7 +509,7 @@ function KeyboardMesh({
 }) {
   const w = (part.widthMm ?? 360) / 1000
   const d = (part.depthMm ?? 145) / 1000
-  const h = (part.heightMm ?? 36) / 1000
+  const h = Math.min((part.heightMm ?? 36) / 1000, 0.02)
   const rgb = part.scene === 'rgb'
   const top = useMemo(
     () =>
@@ -595,19 +595,19 @@ function HeadsetMesh({
 }) {
   const band = useMemo(() => {
     const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.085, 0.03, 0),
-      new THREE.Vector3(-0.055, 0.12, 0),
-      new THREE.Vector3(0, 0.16, 0),
-      new THREE.Vector3(0.055, 0.12, 0),
-      new THREE.Vector3(0.085, 0.03, 0),
+      new THREE.Vector3(-0.07, 0.04, 0),
+      new THREE.Vector3(-0.035, 0.045, 0.055),
+      new THREE.Vector3(0, 0.048, 0.08),
+      new THREE.Vector3(0.035, 0.045, 0.055),
+      new THREE.Vector3(0.07, 0.04, 0),
     ])
-    return new THREE.TubeGeometry(curve, 24, 0.008, 8, false)
+    return new THREE.TubeGeometry(curve, 24, 0.007, 8, false)
   }, [])
   const color = hot ? '#4a3028' : '#262a30'
   return (
     <Hotspot category="headset" onSelect={onSelect} onHover={onHover}>
-      <group position={position}>
-        <GroundShadow position={[0, 0.003, 0]} width={0.22} depth={0.16} />
+      <group position={position} rotation={[0, 0.4, 0]}>
+        <GroundShadow position={[0, 0.002, 0.03]} width={0.22} depth={0.16} />
         <mesh geometry={band} castShadow>
           <meshStandardMaterial
             color={color}
@@ -618,13 +618,13 @@ function HeadsetMesh({
           />
         </mesh>
         {[-1, 1].map((side) => (
-          <group key={side} position={[side * 0.085, 0.03, 0]} rotation={[0, 0, side * 0.12]}>
-            <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.042, 0.045, 0.032, 20]} />
+          <group key={side} position={[side * 0.07, 0.04, 0]}>
+            <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.04, 0.042, 0.028, 20]} />
               <meshStandardMaterial color={color} metalness={0.35} roughness={0.45} />
             </mesh>
-            <mesh position={[side * 0.012, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.026, 0.026, 0.01, 16]} />
+            <mesh position={[side * -0.012, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.026, 0.026, 0.008, 16]} />
               <meshStandardMaterial color="#c45c26" roughness={0.6} />
             </mesh>
           </group>
@@ -634,11 +634,11 @@ function HeadsetMesh({
   )
 }
 
-function Mat({ x, z, w }: { x: number; z: number; w: number }) {
+function Mat({ x, z, w, d }: { x: number; z: number; w: number; d: number }) {
   return (
     <group position={[x, TOP + 0.001, z]}>
       <mesh receiveShadow raycast={() => null}>
-        <boxGeometry args={[w, 0.004, 0.3]} />
+        <boxGeometry args={[w, 0.004, d]} />
         <meshStandardMaterial color="#2a241e" roughness={0.92} />
       </mesh>
     </group>
@@ -727,9 +727,9 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
       anchor === 'gpu' || anchor === 'case' ? show('case') : show(anchor)
     if (visible) {
       if (anchor === 'monitor') labelPos = [monitorX, TOP + 0.078 + (monitor?.heightMm ?? 350) / 1000 + 0.06, -0.2]
-      else if (anchor === 'keyboard') labelPos = [keyboardX, TOP + (keyboard?.heightMm ?? 36) / 1000 + 0.08, 0.16]
+      else if (anchor === 'keyboard') labelPos = [keyboardX, TOP + 0.1, 0.16]
       else if (anchor === 'mouse') labelPos = [mouseX, TOP + (mouse?.heightMm ?? 40) / 1000 + 0.08, 0.18]
-      else if (anchor === 'headset') labelPos = [headsetX, TOP + 0.24, 0.02]
+      else if (anchor === 'headset') labelPos = [headsetX, TOP + 0.12, 0.02]
       else labelPos = [towerX, TOP + (tower?.heightMm ?? 450) / 1000 + 0.08, towerZ]
     }
   }
@@ -754,9 +754,25 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
       <directionalLight position={[-2.4, 1.8, -1.4]} intensity={0.55} color="#c5d4ff" />
       <pointLight position={[0.1, 1.7, 0.5]} intensity={6} distance={5} decay={2} color="#ffe0bf" />
       <Desk studio={studio} interactive={interactive} onSide={onSide} />
-      {show('keyboard') && keyboard && (
-        <Mat x={(keyboardX + mouseX) / 2} z={0.16} w={Math.min(Math.abs(zoneRight - zoneLeft) - 0.04, kbW + 0.22)} />
-      )}
+      {show('keyboard') && keyboard && (() => {
+        const kbD = (keyboard.depthMm ?? 145) / 1000
+        const mouseD = (mouse?.depthMm ?? 120) / 1000
+        const keyboardZ = 0.16
+        const mouseZ = 0.18
+        const spanLeft = Math.min(keyboardX - kbW / 2, mouseX - mouseW / 2)
+        const spanRight = Math.max(keyboardX + kbW / 2, mouseX + mouseW / 2)
+        const spanBack = Math.min(keyboardZ - kbD / 2, mouseZ - mouseD / 2)
+        const spanFront = Math.max(keyboardZ + kbD / 2, mouseZ + mouseD / 2)
+        const margin = 0.03
+        return (
+          <Mat
+            x={(spanLeft + spanRight) / 2}
+            z={(spanBack + spanFront) / 2}
+            w={spanRight - spanLeft + margin * 2}
+            d={spanFront - spanBack + margin * 2}
+          />
+        )
+      })()}
       {show('monitor') && monitor && (
         <MonitorMesh
           part={monitor}
@@ -809,7 +825,7 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         />
       )}
       {label && labelPos && (
-        <Html position={labelPos} center distanceFactor={1.45} zIndexRange={[20, 0]} style={{ pointerEvents: 'auto' }}>
+        <Html position={labelPos} center distanceFactor={1.45} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
           <div className="part-card">
             <strong>{label.name}</strong>
             <span>{money(label.price)}</span>

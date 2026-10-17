@@ -491,15 +491,11 @@ export function alternatives(
     }
     const ids = current.parts.map((item) => (item.category === category ? part.id : item.id))
     const parts = ids.map(getPart)
-    if (compatibilityIssues(parts).length) return false
-    const total = partTotal(ids)
-    if (!current.overBudget && total > input.budget) return false
-    if (current.overBudget && part.price > selected.price) return false
-    return true
+    return compatibilityIssues(parts).length === 0
   })
 
-  candidates.sort((a, b) => Math.abs(a.price - selected.price) - Math.abs(b.price - selected.price))
-  return candidates.slice(0, 3)
+  candidates.sort((a, b) => a.price - b.price)
+  return candidates
 }
 
 export function compatibilityText(part: Part, parts: Part[]): string {

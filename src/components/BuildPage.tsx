@@ -5,7 +5,7 @@ import { readSetup, readSwaps, writeSetup } from '../query'
 import { referralUrl } from '../catalog'
 import { money, recommend } from '../recommend'
 import { SetupScene, type Hand, type HideKey, type SceneHandle } from '../scene/SetupScene'
-import type { Category, Variant } from '../types'
+import type { Category } from '../types'
 import { Brand } from './Brand'
 import { PartsPanel } from './PartsPanel'
 
@@ -58,11 +58,6 @@ export function BuildPage() {
     const timer = window.setTimeout(() => setToast(''), 3200)
     return () => window.clearTimeout(timer)
   }, [toast])
-
-  function setVariant(variant: Variant) {
-    const next = writeSetup({ ...input, variant })
-    setParams(new URLSearchParams(next), { replace: true })
-  }
 
   function swap(category: Category, id: string) {
     const nextSwaps = { ...swaps, [category]: id }
@@ -191,7 +186,6 @@ export function BuildPage() {
           selected={selected}
           onSelect={setSelected}
           onHover={setHover}
-          onVariant={setVariant}
           onSwap={swap}
           onOpenLinks={() => links.current?.showModal()}
         />

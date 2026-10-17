@@ -199,7 +199,6 @@ export function HomePage() {
           <button className="primary" type="submit" disabled={reading}>
             Show me the build
           </button>
-          <p className="hint">You pay nothing here. A part link is a referral.</p>
         </form>
 
         <aside className="preview-card">

@@ -10,7 +10,6 @@ type Props = {
   selected: Category
   onSelect: (category: Category) => void
   onHover: (category: Category | null) => void
-  onVariant: (variant: SetupInput['variant']) => void
   onSwap: (category: Category, id: string) => void
   onOpenLinks: () => void
 }
@@ -21,7 +20,6 @@ export function PartsPanel({
   selected,
   onSelect,
   onHover,
-  onVariant,
   onSwap,
   onOpenLinks,
 }: Props) {
@@ -31,20 +29,6 @@ export function PartsPanel({
   return (
     <aside className="panel">
       <div className="panel-head">
-        <div className="tabs" role="tablist" aria-label="Builds in this budget">
-          {(['balanced', 'quiet', 'frames'] as const).map((variant) => (
-            <button
-              key={variant}
-              type="button"
-              role="tab"
-              aria-selected={build.variant === variant}
-              className={build.variant === variant ? 'is-on' : ''}
-              onClick={() => onVariant(variant)}
-            >
-              {variant === 'balanced' ? 'Balanced' : variant === 'quiet' ? 'Quieter' : 'Higher frame rate'}
-            </button>
-          ))}
-        </div>
         <p className="intent">{build.intentLabel}</p>
         <p className="blurb">{build.blurb}</p>
         {build.notes.length > 0 && (
@@ -68,22 +52,25 @@ export function PartsPanel({
       <div className="parts">
         {build.parts.map((part) => {
           const on = part.category === selected
-          const options = on ? alternatives(build, part.category, input) : []
+          const options = alternatives(build, part.category, input)
           const dims = sizeText(part)
           return (
-            <article
+            <details
               key={part.category}
               id={`part-${part.category}`}
               className={on ? 'part is-on' : 'part'}
               onMouseEnter={() => onHover(part.category)}
               onMouseLeave={() => onHover(null)}
+              onToggle={(event) => {
+                if (event.currentTarget.open) onSelect(part.category)
+              }}
             >
-              <button type="button" className="part-main" onClick={() => onSelect(part.category)}>
+              <summary className="part-main">
                 <span className="part-kicker">{CATEGORY_LABEL[part.category]}</span>
                 <span className="part-price">{money(part.price)}</span>
                 <span className="part-name">{part.name}</span>
                 <span className="part-why">{part.reason}</span>
-              </button>
+              </summary>
               <div className="part-actions">
                 {part.price > 0 ? (
                   <a href={referralUrl(part)} target="_blank" rel="noreferrer noopener">
@@ -92,14 +79,14 @@ export function PartsPanel({
                 ) : (
                   <span className="included">Comes with the processor</span>
                 )}
-                {on && inside.has(part.category) && (
+                {inside.has(part.category) && (
                   <p className="inside">Inside the tower. The case is highlighted in the scene.</p>
                 )}
-                {on && <p className="compat">{compatibilityText(part, build.parts)}</p>}
-                {on && dims && <p className="dims">{dims}</p>}
-                {on && options.length > 0 && (
+                <p className="compat">{compatibilityText(part, build.parts)}</p>
+                {dims && <p className="dims">{dims}</p>}
+                {options.length > 0 && (
                   <div className="alts">
-                    <span>Other checked options</span>
+                    <span>Switch to</span>
                     {options.map((option) => (
                       <button key={option.id} type="button" onClick={() => onSwap(part.category, option.id)}>
                         {option.name}
@@ -109,7 +96,7 @@ export function PartsPanel({
                   </div>
                 )}
               </div>
-            </article>
+            </details>
           )
         })}
       </div>

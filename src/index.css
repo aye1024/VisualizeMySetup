@@ -24,7 +24,7 @@ body {
   margin: 0;
   background: var(--bg);
 }
-button, input { font: inherit; color: inherit; }
+button, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: inherit; }
 img { max-width: 100%; display: block; }
@@ -121,7 +121,7 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
   gap: 1.4rem;
-  align-items: start;
+  align-items: stretch;
 }
 .card, .preview-card {
   background: var(--card);
@@ -129,7 +129,7 @@ h1 {
   border-radius: 20px;
   box-shadow: var(--shadow);
 }
-.card { padding: 1.15rem 1.15rem 1.2rem; display: grid; gap: 0.55rem; }
+.card { padding: 1.15rem 1.15rem 1.2rem; display: flex; flex-direction: column; gap: 0.55rem; height: 100%; }
 .card label, .card legend {
   font-size: 0.72rem;
   letter-spacing: 0.14em;
@@ -146,10 +146,13 @@ h1 {
   padding: 0.75rem 0.85rem;
 }
 .card textarea {
-  min-height: 8.5rem;
+  flex: 1 1 auto;
+  min-height: 16rem;
   resize: vertical;
   line-height: 1.45;
+  color: var(--ink);
 }
+.card textarea::placeholder { color: var(--muted); }
 .budget-field { display: flex; align-items: center; gap: 0.4rem; }
 .budget-field span { color: var(--muted); }
 fieldset { border: 0; padding: 0; margin: 0; }
@@ -291,6 +294,11 @@ fieldset { border: 0; padding: 0; margin: 0; }
   border: 1px solid transparent;
 }
 .part.is-on { background: #181818; border-color: rgba(255, 77, 26, 0.55); }
+.part summary {
+  cursor: pointer;
+  list-style: none;
+}
+.part summary::-webkit-details-marker { display: none; }
 .part-main {
   width: 100%;
   text-align: left;
@@ -372,6 +380,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
   display: grid;
   gap: 0.15rem;
+  pointer-events: auto;
 }
 .part-card strong {
   font-size: 0.82rem;
