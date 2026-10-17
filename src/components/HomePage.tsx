@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clearPhoto, loadPhoto, readDeskPhoto, savePhoto, type DeskPhoto } from '../photo'
 import { writeSetup } from '../query'
+import { referralUrl } from '../catalog'
 import { money, recommend } from '../recommend'
 import { parseSpecs } from '../specs'
 import { SetupScene } from '../scene/SetupScene'
@@ -227,11 +228,18 @@ export function HomePage() {
             />
           </div>
           <p className="preview-foot">
-            {pickedPart
-              ? `${pickedPart.name} · ${money(pickedPart.price)}`
-              : sample
-                ? 'A $1,200 story build on the neutral desk. Drag to look around, or click a part. This is not your list until you ask.'
-                : preview.blurb}
+            {pickedPart ? (
+              <>
+                {pickedPart.name} · {money(pickedPart.price)} ·{' '}
+                <a href={referralUrl(pickedPart)} target="_blank" rel="noreferrer">
+                  View to buy
+                </a>
+              </>
+            ) : sample ? (
+              'A $1,200 story build on the neutral desk. Click a part for its name, price, and buy link.'
+            ) : (
+              preview.blurb
+            )}
           </p>
         </aside>
       </div>

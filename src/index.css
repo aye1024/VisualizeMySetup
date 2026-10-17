@@ -197,7 +197,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
 .preview-top p:last-child, .preview-foot { color: var(--muted); font-size: 0.92rem; }
 .preview-stage { height: 560px; position: relative; }
 .preview-stage.studio, .stage.studio {
-  background: radial-gradient(ellipse at 50% 100%, #2a241c 0%, #101010 46%, #070707 100%);
+  background: radial-gradient(ellipse at 50% 100%, #3c2b22 0%, #161310 48%, #0c0b0a 100%);
 }
 .preview-stage.has-photo, .stage.has-photo { background: #120f0d center / cover no-repeat; }
 .preview-stage canvas, .viewport canvas { width: 100% !important; height: 100% !important; display: block; }
@@ -363,17 +363,35 @@ fieldset { border: 0; padding: 0; margin: 0; }
   z-index: 20;
 }
 
-.float-tag {
-  background: #fffaf4;
-  color: #1c1916;
-  border-radius: 999px;
-  padding: 0.35rem 0.65rem;
-  font: 650 12px/1.2 var(--sans);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
-  max-width: 220px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.part-card {
+  width: 210px;
+  background: #f4f4f4;
+  color: #111;
+  border-radius: 14px;
+  padding: 0.55rem 0.7rem 0.65rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 0.15rem;
+}
+.part-card strong {
+  font-size: 0.82rem;
+  line-height: 1.25;
+  font-weight: 750;
+}
+.part-card span {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.part-card a {
+  color: #c2410c;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+.preview-foot a {
+  color: var(--accent-deep);
+  font-weight: 700;
 }
 
 @media (max-width: 960px) {

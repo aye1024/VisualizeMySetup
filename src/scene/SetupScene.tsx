@@ -1,7 +1,4 @@
 import { Html, OrbitControls, RoundedBox, useCursor } from '@react-three/drei'
-import { Dressing } from './Dressing'
-import { ListingSolid } from './ListingSolid'
-import { LISTING_PHOTO } from './listing'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import {
   forwardRef,
@@ -13,7 +10,8 @@ import {
   type RefObject,
 } from 'react'
 import * as THREE from 'three'
-import { DESK_WIDTH_MM } from '../catalog'
+import { DESK_WIDTH_MM, referralUrl } from '../catalog'
+import { money } from '../recommend'
 import type { Category, ResolvedPart } from '../types'
 import { keyTexture, screenTexture, shadowTexture, woodTexture } from './textures'
 
@@ -95,7 +93,10 @@ function Hotspot({
         setOver(false)
         onHover?.(null)
       }}
-      onPointerDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => {
+        rememberPointer(event)
+        event.stopPropagation()
+      }}
       onClick={(event) => {
         if (!onSelect || dragged(event)) return
         event.stopPropagation()
@@ -159,11 +160,11 @@ function Desk({
         <>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
             <planeGeometry args={[8, 8]} />
-            <meshStandardMaterial color="#141414" roughness={1} />
+            <meshStandardMaterial color="#241c18" roughness={1} />
           </mesh>
           <mesh position={[0, 1.7, -1.2]} receiveShadow>
             <planeGeometry args={[8, 4.2]} />
-            <meshStandardMaterial color="#1a1a1a" roughness={1} />
+            <meshStandardMaterial color="#3a312b" roughness={1} />
           </mesh>
         </>
       )}
@@ -181,7 +182,7 @@ function Desk({
         }}
       >
         <boxGeometry args={[DESK_W, 0.032, DESK_D]} />
-        <meshStandardMaterial map={wood} roughness={0.72} metalness={0.04} color="#c4a27a" />
+        <meshStandardMaterial map={wood} roughness={0.78} metalness={0.02} color="#f3d2b0" />
       </mesh>
       <mesh position={[0, TOP - 0.004, DESK_D / 2 - 0.008]}>
         <boxGeometry args={[DESK_W, 0.01, 0.016]} />
@@ -218,23 +219,7 @@ function MonitorMesh({
   const w = (part.widthMm ?? 614) / 1000
   const h = (part.heightMm ?? 350) / 1000
   const stand = 0.078
-  const photo = LISTING_PHOTO[part.id]
-  if (photo) {
-    return (
-      <Hotspot category="monitor" onSelect={onSelect} onHover={onHover}>
-        <group position={position}>
-          <ListingSolid
-            src={photo}
-            width={w * 1.12}
-            depth={0.045}
-            lay="stand"
-            hot={hot}
-            maxHeight={h + 0.18}
-          />
-        </group>
-      </Hotspot>
-    )
-  }
+  const thick = Math.min(0.04, Math.max(0.022, ((part.depthMm ?? 50) / 1000) * 0.55))
   return (
     <Hotspot category="monitor" onSelect={onSelect} onHover={onHover}>
       <group position={position}>
@@ -248,7 +233,7 @@ function MonitorMesh({
           <meshStandardMaterial color="#23262b" metalness={0.45} roughness={0.4} />
         </mesh>
         <group position={[0, stand + h / 2, 0]} rotation={[-0.07, 0, 0]}>
-          <RoundedBox args={[w, h, 0.028]} radius={0.008} smoothness={3} castShadow>
+          <RoundedBox args={[w, h, thick]} radius={0.008} smoothness={3} castShadow>
             <meshStandardMaterial
               color={hot ? '#3a2a24' : '#121416'}
               metalness={0.55}
@@ -257,7 +242,7 @@ function MonitorMesh({
               emissiveIntensity={hot ? 0.18 : 0}
             />
           </RoundedBox>
-          <mesh position={[0, 0, 0.015]}>
+          <mesh position={[0, 0, thick / 2 + 0.001]}>
             <planeGeometry args={[w - 0.028, h - 0.028]} />
             <meshStandardMaterial
               map={screenTexture()}
@@ -268,7 +253,7 @@ function MonitorMesh({
               toneMapped={false}
             />
           </mesh>
-          <mesh position={[0, -h / 2 + 0.01, 0.016]}>
+          <mesh position={[0, -h / 2 + 0.01, thick / 2 + 0.002]}>
             <sphereGeometry args={[0.004, 12, 12]} />
             <meshStandardMaterial color="#d7ffd0" emissive="#9dff8a" emissiveIntensity={1.4} />
           </mesh>
@@ -524,16 +509,7 @@ function KeyboardMesh({
 }) {
   const w = (part.widthMm ?? 360) / 1000
   const d = (part.depthMm ?? 145) / 1000
-  const photo = LISTING_PHOTO[part.id]
-  if (photo) {
-    return (
-      <Hotspot category="keyboard" onSelect={onSelect} onHover={onHover}>
-        <group position={position}>
-          <ListingSolid src={photo} width={w} depth={0.016} lay="flat" hot={hot} />
-        </group>
-      </Hotspot>
-    )
-  }
+  const h = (part.heightMm ?? 36) / 1000
   const rgb = part.scene === 'rgb'
   const top = useMemo(
     () =>
@@ -558,31 +534,9 @@ function KeyboardMesh({
   return (
     <Hotspot category="keyboard" onSelect={onSelect} onHover={onHover}>
       <group position={position} rotation={[-0.04, 0, 0]}>
-        <mesh position={[0, 0.016, 0]} castShadow material={[side, side, top, side, side, side]}>
-          <boxGeometry args={[w, 0.028, d]} />
+        <mesh position={[0, h / 2, 0]} castShadow material={[side, side, top, side, side, side]}>
+          <boxGeometry args={[w, h, d]} />
         </mesh>
-        {Array.from({ length: 5 }, (_, row) => {
-          const cols = row === 4 ? 7 : 14
-          const span = w * (row === 4 ? 0.62 : 0.92)
-          const keyW = span / cols - 0.004
-          const z = -d * 0.36 + row * d * 0.16
-          return Array.from({ length: cols }, (_, col) => (
-            <mesh
-              key={`${row}-${col}`}
-              position={[-span / 2 + keyW / 2 + col * (span / cols), 0.034, z]}
-              castShadow
-            >
-              <boxGeometry args={[keyW, 0.01, d * 0.11]} />
-              <meshStandardMaterial
-                color={hot ? '#3a2a24' : rgb ? '#2a2428' : '#23272e'}
-                roughness={0.42}
-                metalness={0.2}
-                emissive={rgb ? '#ff4d1c' : '#000000'}
-                emissiveIntensity={rgb ? 0.12 : 0}
-              />
-            </mesh>
-          ))
-        })}
       </group>
     </Hotspot>
   )
@@ -603,21 +557,13 @@ function MouseMesh({
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
 }) {
-  const photo = part ? LISTING_PHOTO[part.id] : undefined
-  if (photo) {
-    const w = (part?.widthMm ?? 68) / 1000
-    return (
-      <Hotspot category="mouse" onSelect={onSelect} onHover={onHover}>
-        <group position={position} rotation={[0, flip ? Math.PI : 0, 0]}>
-          <ListingSolid src={photo} width={Math.max(w, 0.078)} depth={0.02} lay="flat" hot={hot} />
-        </group>
-      </Hotspot>
-    )
-  }
+  const w = (part?.widthMm ?? 65) / 1000
+  const h = (part?.heightMm ?? 40) / 1000
+  const d = (part?.depthMm ?? 120) / 1000
   return (
     <Hotspot category="mouse" onSelect={onSelect} onHover={onHover}>
       <group position={position} rotation={[0, flip ? Math.PI : 0, 0]}>
-        <mesh position={[0, 0.02, 0]} castShadow scale={[0.62, 0.7, 1]}>
+        <mesh position={[0, h / 2, 0]} castShadow scale={[w / 0.056, h / 0.056, d / 0.056]}>
           <sphereGeometry args={[0.028, 24, 16]} />
           <meshStandardMaterial
             color={hot ? '#4a3028' : '#1c1e22'}
@@ -627,8 +573,8 @@ function MouseMesh({
             emissiveIntensity={hot ? 0.2 : 0}
           />
         </mesh>
-        <mesh position={[0, 0.034, -0.004]}>
-          <boxGeometry args={[0.006, 0.008, 0.016]} />
+        <mesh position={[0, h * 0.72, -d * 0.12]}>
+          <boxGeometry args={[0.008, h * 0.22, d * 0.16]} />
           <meshStandardMaterial color="#8b9098" metalness={0.6} roughness={0.3} />
         </mesh>
       </group>
@@ -649,11 +595,11 @@ function HeadsetMesh({
 }) {
   const band = useMemo(() => {
     const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.075, 0.02, 0),
-      new THREE.Vector3(-0.05, 0.09, 0),
-      new THREE.Vector3(0, 0.115, 0),
-      new THREE.Vector3(0.05, 0.09, 0),
-      new THREE.Vector3(0.075, 0.02, 0),
+      new THREE.Vector3(-0.085, 0.03, 0),
+      new THREE.Vector3(-0.055, 0.12, 0),
+      new THREE.Vector3(0, 0.16, 0),
+      new THREE.Vector3(0.055, 0.12, 0),
+      new THREE.Vector3(0.085, 0.03, 0),
     ])
     return new THREE.TubeGeometry(curve, 24, 0.008, 8, false)
   }, [])
@@ -661,7 +607,7 @@ function HeadsetMesh({
   return (
     <Hotspot category="headset" onSelect={onSelect} onHover={onHover}>
       <group position={position}>
-        <GroundShadow position={[0, 0.003, 0]} width={0.2} depth={0.14} />
+        <GroundShadow position={[0, 0.003, 0]} width={0.22} depth={0.16} />
         <mesh geometry={band} castShadow>
           <meshStandardMaterial
             color={color}
@@ -672,9 +618,9 @@ function HeadsetMesh({
           />
         </mesh>
         {[-1, 1].map((side) => (
-          <group key={side} position={[side * 0.075, 0.02, 0]} rotation={[0, 0, side * 0.15]}>
+          <group key={side} position={[side * 0.085, 0.03, 0]} rotation={[0, 0, side * 0.12]}>
             <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.038, 0.04, 0.028, 20]} />
+              <cylinderGeometry args={[0.042, 0.045, 0.032, 20]} />
               <meshStandardMaterial color={color} metalness={0.35} roughness={0.45} />
             </mesh>
             <mesh position={[side * 0.012, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -763,12 +709,13 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
   const monitorX = THREE.MathUtils.clamp((zoneLeft + zoneRight) / 2, zoneLeft + monitorW / 2, zoneRight - monitorW / 2)
   const kbW = (keyboard?.widthMm ?? 360) / 1000
   const keyboardX = THREE.MathUtils.clamp(monitorX, zoneLeft + kbW / 2, zoneRight - kbW / 2)
-  const mouseGap = kbW / 2 + 0.055
+  const mouseW = (mouse?.widthMm ?? 65) / 1000
+  const mouseGap = kbW / 2 + mouseW / 2 + 0.03
   const prefer = hand === 'right' ? 1 : -1
   let mouseX = keyboardX + prefer * mouseGap
   const mouseFits = mouseX > zoneLeft + 0.04 && mouseX < zoneRight - 0.04
   if (!mouseFits) mouseX = keyboardX - prefer * mouseGap
-  const headsetX = towerX >= 0 ? deskLeft + 0.08 : deskRight - 0.08
+  const headsetX = towerX >= 0 ? deskLeft + 0.12 : deskRight - 0.12
   const focus = active ? anchorOf(active) : null
   const show = (key: HideKey) => !hiddenSet.has(key)
 
@@ -779,20 +726,20 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
     const visible =
       anchor === 'gpu' || anchor === 'case' ? show('case') : show(anchor)
     if (visible) {
-      if (anchor === 'monitor') labelPos = [monitorX, TOP + 0.62, -0.2]
-      else if (anchor === 'keyboard') labelPos = [keyboardX, TOP + 0.12, 0.16]
-      else if (anchor === 'mouse') labelPos = [mouseX, TOP + 0.12, 0.18]
-      else if (anchor === 'headset') labelPos = [headsetX, TOP + 0.22, 0.02]
+      if (anchor === 'monitor') labelPos = [monitorX, TOP + 0.078 + (monitor?.heightMm ?? 350) / 1000 + 0.06, -0.2]
+      else if (anchor === 'keyboard') labelPos = [keyboardX, TOP + (keyboard?.heightMm ?? 36) / 1000 + 0.08, 0.16]
+      else if (anchor === 'mouse') labelPos = [mouseX, TOP + (mouse?.heightMm ?? 40) / 1000 + 0.08, 0.18]
+      else if (anchor === 'headset') labelPos = [headsetX, TOP + 0.24, 0.02]
       else labelPos = [towerX, TOP + (tower?.heightMm ?? 450) / 1000 + 0.08, towerZ]
     }
   }
 
   return (
     <>
-      <hemisphereLight args={['#d5dbe6', '#161311', 0.7]} />
+      <hemisphereLight args={['#fff6ec', '#3a2c22', 0.95]} />
       <directionalLight
-        position={[1.6, 3.4, 2.6]}
-        intensity={2.15}
+        position={[2.6, 4.2, 2.4]}
+        intensity={2.5}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.00035}
@@ -804,10 +751,9 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         shadow-camera-top={2}
         shadow-camera-bottom={-2}
       />
-      <directionalLight position={[-2.2, 2.1, -1.1]} intensity={0.38} color="#9eb0cc" />
-      <pointLight position={[-0.32, 1.22, -0.08]} intensity={6} distance={2.6} decay={2} color="#ffc48a" />
+      <directionalLight position={[-2.4, 1.8, -1.4]} intensity={0.55} color="#c5d4ff" />
+      <pointLight position={[0.1, 1.7, 0.5]} intensity={6} distance={5} decay={2} color="#ffe0bf" />
       <Desk studio={studio} interactive={interactive} onSide={onSide} />
-      <Dressing />
       {show('keyboard') && keyboard && (
         <Mat x={(keyboardX + mouseX) / 2} z={0.16} w={Math.min(Math.abs(zoneRight - zoneLeft) - 0.04, kbW + 0.22)} />
       )}
@@ -863,8 +809,14 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         />
       )}
       {label && labelPos && (
-        <Html position={labelPos} center distanceFactor={1.5} zIndexRange={[8, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="float-tag">{label.name}</div>
+        <Html position={labelPos} center distanceFactor={1.45} zIndexRange={[20, 0]} style={{ pointerEvents: 'auto' }}>
+          <div className="part-card">
+            <strong>{label.name}</strong>
+            <span>{money(label.price)}</span>
+            <a href={referralUrl(label)} target="_blank" rel="noreferrer">
+              View to buy
+            </a>
+          </div>
         </Html>
       )}
       <Rig controls={controls} spin={props.spinning} />
