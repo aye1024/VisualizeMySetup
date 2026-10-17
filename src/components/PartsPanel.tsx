@@ -1,0 +1,137 @@
+import { CATEGORY_LABEL, referralUrl } from '../catalog'
+import { alternatives, compatibilityText, money, sizeText } from '../recommend'
+import type { Category, RecommendedBuild, SetupInput } from '../types'
+
+const inside = new Set<Category>(['cpu', 'cooler', 'motherboard', 'memory', 'storage', 'psu'])
+
+type Props = {
+  build: RecommendedBuild
+  input: SetupInput
+  selected: Category
+  onSelect: (category: Category) => void
+  onHover: (category: Category | null) => void
+  onVariant: (variant: SetupInput['variant']) => void
+  onSwap: (category: Category, id: string) => void
+  onOpenLinks: () => void
+}
+
+export function PartsPanel({
+  build,
+  input,
+  selected,
+  onSelect,
+  onHover,
+  onVariant,
+  onSwap,
+  onOpenLinks,
+}: Props) {
+  const leftLabel = build.overBudget ? 'Over budget' : 'Left'
+  const leftValue = Math.abs(build.remainder)
+
+  return (
+    <aside className="panel">
+      <div className="panel-head">
+        <div className="tabs" role="tablist" aria-label="Builds in this budget">
+          {(['balanced', 'quiet', 'frames'] as const).map((variant) => (
+            <button
+              key={variant}
+              type="button"
+              role="tab"
+              aria-selected={build.variant === variant}
+              className={build.variant === variant ? 'is-on' : ''}
+              onClick={() => onVariant(variant)}
+            >
+              {variant === 'balanced' ? 'Balanced' : variant === 'quiet' ? 'Quieter' : 'Higher frame rate'}
+            </button>
+          ))}
+        </div>
+        <p className="intent">{build.intentLabel}</p>
+        <p className="blurb">{build.blurb}</p>
+        {build.notes.length > 0 && (
+          <ul className="notes">
+            {build.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        )}
+        <details className="checks">
+          <summary>Socket, memory, clearance, power</summary>
+          <ul>
+            {build.checks.map((check) => (
+              <li key={check}>{check}</li>
+            ))}
+          </ul>
+        </details>
+        <p className="search-note">Swap a part for another checked option. A live search of the whole catalog is still in progress.</p>
+      </div>
+
+      <div className="parts">
+        {build.parts.map((part) => {
+          const on = part.category === selected
+          const options = on ? alternatives(build, part.category, input) : []
+          const dims = sizeText(part)
+          return (
+            <article
+              key={part.category}
+              id={`part-${part.category}`}
+              className={on ? 'part is-on' : 'part'}
+              onMouseEnter={() => onHover(part.category)}
+              onMouseLeave={() => onHover(null)}
+            >
+              <button type="button" className="part-main" onClick={() => onSelect(part.category)}>
+                <span className="part-kicker">{CATEGORY_LABEL[part.category]}</span>
+                <span className="part-price">{money(part.price)}</span>
+                <span className="part-name">{part.name}</span>
+                <span className="part-why">{part.reason}</span>
+              </button>
+              <div className="part-actions">
+                {part.price > 0 ? (
+                  <a href={referralUrl(part)} target="_blank" rel="noreferrer noopener">
+                    View to buy
+                  </a>
+                ) : (
+                  <span className="included">Comes with the processor</span>
+                )}
+                {on && inside.has(part.category) && (
+                  <p className="inside">Inside the tower. The case is highlighted in the scene.</p>
+                )}
+                {on && <p className="compat">{compatibilityText(part, build.parts)}</p>}
+                {on && dims && <p className="dims">{dims}</p>}
+                {on && options.length > 0 && (
+                  <div className="alts">
+                    <span>Other checked options</span>
+                    {options.map((option) => (
+                      <button key={option.id} type="button" onClick={() => onSwap(part.category, option.id)}>
+                        {option.name}
+                        <em>{money(option.price)}</em>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+
+      <footer className="settle">
+        <div className="totals">
+          <p>
+            <span>Total</span>
+            <strong>{money(build.total)}</strong>
+          </p>
+          <p>
+            <span>{leftLabel}</span>
+            <strong className={build.overBudget ? 'bad' : 'good'}>{money(leftValue)}</strong>
+          </p>
+        </div>
+        <p className="pay">
+          We are paid only if you buy. A referral is often a few percent, and only when the purchase is completed.
+        </p>
+        <button type="button" className="ghost" onClick={onOpenLinks}>
+          All part links
+        </button>
+      </footer>
+    </aside>
+  )
+}
