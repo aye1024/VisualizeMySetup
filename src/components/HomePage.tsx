@@ -113,9 +113,7 @@ export function HomePage() {
       </header>
 
       <p className="eyebrow">For a first gaming PC</p>
-      <h1>
-        See it on your <em>desk</em> before you buy the parts.
-      </h1>
+      <h1>See it on your desk before you buy the parts.</h1>
       <p className="lede">
         Name a budget and the games. Get a build that fits together, then place the tower, monitor,
         keyboard, mouse, and headset in the space. The photo is the stage. The parts come from a
@@ -301,25 +299,6 @@ export function HomePage() {
           </p>
         </aside>
       </div>
-
-      <section className="trust">
-        <article>
-          <h2>The photo is the point</h2>
-          <p>A parts list does not show the room. The picture is where the setup sits, at catalog size.</p>
-        </article>
-        <article>
-          <h2>The list is already checked</h2>
-          <p>Socket, memory generation, case clearance, and power supply are matched before the scene opens.</p>
-        </article>
-        <article>
-          <h2>You pay the store</h2>
-          <p>There is no checkout here. We may earn a referral only if you finish buying the parts.</p>
-        </article>
-      </section>
-      <p className="fine">
-        Demo catalog, not a live price feed. The scene uses stand-in models at catalog size. It does not
-        build a graphics card from the photo. The photo is not stored for advertising.
-      </p>
     </div>
   )
 }
