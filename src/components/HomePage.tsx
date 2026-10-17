@@ -3,26 +3,22 @@ import { useNavigate } from 'react-router-dom'
 import { clearPhoto, loadPhoto, readDeskPhoto, savePhoto, type DeskPhoto } from '../photo'
 import { writeSetup } from '../query'
 import { money, recommend } from '../recommend'
+import { parseSpecs } from '../specs'
 import { SetupScene } from '../scene/SetupScene'
-import type { CaseSize, LookPref, NoisePref } from '../types'
+import type { Category } from '../types'
 import { Brand } from './Brand'
-
-const BUDGETS = [800, 1000, 1200, 1500, 2000, 2500]
-const GAMES = ['Elden Ring', 'Valorant', 'Cyberpunk 2077', 'Fortnite', '1080p competitive', '4K']
 
 export function HomePage() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
   const [budget, setBudget] = useState('1200')
-  const [games, setGames] = useState('')
-  const [caseSize, setCaseSize] = useState<CaseSize>('normal')
-  const [noise, setNoise] = useState<NoisePref>('unrestricted')
-  const [look, setLook] = useState<LookPref>('plain')
+  const [specs, setSpecs] = useState('')
   const [photo, setPhoto] = useState<DeskPhoto | null>(() => loadPhoto())
   const [photoError, setPhotoError] = useState('')
   const [formError, setFormError] = useState('')
   const [reading, setReading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [picked, setPicked] = useState<Category | null>(null)
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
@@ -30,19 +26,21 @@ export function HomePage() {
 
   const budgetNum = Number(budget)
   const budgetOk = Number.isFinite(budgetNum) && budgetNum > 0
+  const parsed = useMemo(() => parseSpecs(specs), [specs])
+  const described = specs.trim()
   const preview = useMemo(
     () =>
       recommend(
         {
           budget: budgetOk ? budgetNum : 1200,
-          games: games.trim() || 'Elden Ring',
-          prefs: { caseSize, noise, look },
-          variant: noise === 'quiet' ? 'quiet' : 'balanced',
+          games: described || 'Elden Ring',
+          prefs: parsed.prefs,
+          variant: described ? parsed.variant : 'balanced',
         },
         {},
         Boolean(photo),
       ),
-    [budgetNum, budgetOk, games, caseSize, noise, look, photo],
+    [budgetNum, budgetOk, described, parsed, photo],
   )
 
   async function take(file: File) {
@@ -70,32 +68,23 @@ export function HomePage() {
     }
   }
 
-  function addGame(name: string) {
-    setGames((current) => {
-      if (!current.trim()) return name
-      if (current.toLowerCase().includes(name.toLowerCase())) return current
-      return `${current.trim()}, ${name}`
-    })
-    setFormError('')
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!budgetOk) {
       setFormError('Enter a budget.')
       return
     }
-    if (!games.trim()) {
-      setFormError('Name a game, or a resolution like 1440p.')
+    if (!described) {
+      setFormError('Name a game, a resolution, or how you want the build.')
       return
     }
     const dropped = Boolean(photo) && !savePhoto(photo as DeskPhoto)
     const search = writeSetup(
       {
         budget: budgetNum,
-        games: games.trim(),
-        prefs: { caseSize, noise, look },
-        variant: noise === 'quiet' ? 'quiet' : 'balanced',
+        games: described,
+        prefs: parsed.prefs,
+        variant: parsed.variant,
       },
       {},
       dropped ? { photo: 'dropped' } : undefined,
@@ -103,7 +92,8 @@ export function HomePage() {
     navigate(`/build?${search}`)
   }
 
-  const sample = !games.trim()
+  const sample = !described
+  const pickedPart = picked ? preview.parts.find((part) => part.category === picked) : undefined
 
   return (
     <div className="home">
@@ -180,21 +170,6 @@ export function HomePage() {
           <p className="hint">The photo stays in this browser. It is the backdrop, not a model of the room.</p>
 
           <label htmlFor="budget">Budget</label>
-          <div className="presets">
-            {BUDGETS.map((amount) => (
-              <button
-                key={amount}
-                type="button"
-                className={budgetNum === amount ? 'is-on' : ''}
-                onClick={() => {
-                  setBudget(String(amount))
-                  setFormError('')
-                }}
-              >
-                {money(amount)}
-              </button>
-            ))}
-          </div>
           <div className="budget-field">
             <span>$</span>
             <input
@@ -208,58 +183,16 @@ export function HomePage() {
             />
           </div>
 
-          <label htmlFor="games">Games, or resolution</label>
-          <input
-            id="games"
-            value={games}
-            placeholder="Elden Ring, or 1440p"
+          <label htmlFor="specs">Specifications</label>
+          <textarea
+            id="specs"
+            value={specs}
+            placeholder="Elden Ring, 1440p, quiet, small case, no RGB"
             onChange={(event) => {
-              setGames(event.target.value)
+              setSpecs(event.target.value)
               setFormError('')
             }}
           />
-          <div className="presets wrap">
-            {GAMES.map((game) => (
-              <button key={game} type="button" onClick={() => addGame(game)}>
-                {game}
-              </button>
-            ))}
-          </div>
-
-          <fieldset>
-            <legend>Case</legend>
-            <Segment
-              value={caseSize}
-              options={[
-                ['small', 'Small'],
-                ['normal', 'Normal'],
-                ['large', 'Large'],
-              ]}
-              onChange={setCaseSize}
-            />
-          </fieldset>
-          <fieldset>
-            <legend>Noise</legend>
-            <Segment
-              value={noise}
-              options={[
-                ['unrestricted', 'Unrestricted'],
-                ['quiet', 'Quiet'],
-              ]}
-              onChange={setNoise}
-            />
-          </fieldset>
-          <fieldset>
-            <legend>Look</legend>
-            <Segment
-              value={look}
-              options={[
-                ['plain', 'Plain'],
-                ['rgb', 'RGB'],
-              ]}
-              onChange={setLook}
-            />
-          </fieldset>
 
           {formError && <p className="error">{formError}</p>}
           <button className="primary" type="submit" disabled={reading}>
@@ -282,7 +215,7 @@ export function HomePage() {
           >
             <SetupScene
               parts={preview.parts}
-              active={null}
+              active={picked}
               hidden={[]}
               side="right"
               dragX={null}
@@ -290,42 +223,18 @@ export function HomePage() {
               studio={!photo}
               preview
               reducedMotion={reducedMotion}
+              onSelect={setPicked}
             />
           </div>
           <p className="preview-foot">
-            {sample
-              ? 'A $1,200 story build on the neutral desk. Drag to look around. This is not your list until you ask.'
-              : preview.blurb}
+            {pickedPart
+              ? `${pickedPart.name} · ${money(pickedPart.price)}`
+              : sample
+                ? 'A $1,200 story build on the neutral desk. Drag to look around, or click a part. This is not your list until you ask.'
+                : preview.blurb}
           </p>
         </aside>
       </div>
-    </div>
-  )
-}
-
-function Segment<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T
-  options: Array<[T, string]>
-  onChange: (value: T) => void
-}) {
-  return (
-    <div className="segment" role="radiogroup">
-      {options.map(([option, label]) => (
-        <button
-          key={option}
-          type="button"
-          role="radio"
-          aria-checked={value === option}
-          className={value === option ? 'is-on' : ''}
-          onClick={() => onChange(option)}
-        >
-          {label}
-        </button>
-      ))}
     </div>
   )
 }

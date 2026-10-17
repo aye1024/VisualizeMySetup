@@ -1,5 +1,6 @@
 import { BUILDS, CATALOG, TIER_ORDER, getPart, partTotal } from './catalog'
 import { compatibilityIssues, recommend } from './recommend'
+import { parseSpecs } from './specs'
 import type { Preferences, Variant } from './types'
 
 const variants: Variant[] = ['balanced', 'quiet', 'frames']
@@ -122,6 +123,14 @@ export function assertDemo(): void {
       if (issues.length) fail(`$${budget} ${variant}: ${issues.join(' ')}`)
     }
   }
+
+  const quietSpec = parseSpecs('Elden Ring, quiet, small case, rgb')
+  if (quietSpec.prefs.noise !== 'quiet' || quietSpec.prefs.caseSize !== 'small' || quietSpec.prefs.look !== 'rgb') {
+    fail('spec text did not set quiet, small, and rgb')
+  }
+  if (quietSpec.variant !== 'quiet') fail('quiet spec should pick the quieter build')
+  const frameSpec = parseSpecs('high frame rate, 1080p')
+  if (frameSpec.variant !== 'frames') fail('frame-rate spec should pick the frames build')
 
   if (errors.length) {
     throw new Error(errors.join('\n'))
