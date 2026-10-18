@@ -38,15 +38,6 @@ export function PartsPanel({
             ))}
           </ul>
         )}
-        <details className="checks">
-          <summary>Socket, memory, clearance, power</summary>
-          <ul>
-            {build.checks.map((check) => (
-              <li key={check}>{check}</li>
-            ))}
-          </ul>
-        </details>
-        <p className="search-note">Swap a part for another checked option. A live search of the whole catalog is still in progress.</p>
       </div>
 
       <div className="parts">
