@@ -71,7 +71,16 @@ export function GeneratedMesh({
           ? depthScale
           : widthScale
     root.scale.multiplyScalar(scale)
-    if (thin !== 1) root.scale.y *= thin
+    if (thin !== 1) {
+      const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(root.quaternion.clone().invert())
+      const axis =
+        Math.abs(localUp.x) >= Math.abs(localUp.y) && Math.abs(localUp.x) >= Math.abs(localUp.z)
+          ? 'x'
+          : Math.abs(localUp.z) >= Math.abs(localUp.y)
+            ? 'z'
+            : 'y'
+      root.scale[axis] *= thin
+    }
     root.updateMatrixWorld(true)
     const fitted = new THREE.Box3().setFromObject(root)
     const center = fitted.getCenter(new THREE.Vector3())
