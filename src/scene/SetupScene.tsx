@@ -1,19 +1,12 @@
 import { Html, OrbitControls, RoundedBox, useCursor } from '@react-three/drei'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from 'react'
+import { Suspense, forwardRef, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import * as THREE from 'three'
 import { DESK_WIDTH_MM, referralUrl } from '../catalog'
 import { money } from '../recommend'
 import type { Category, ResolvedPart } from '../types'
 import { keyTexture, screenTexture, shadowTexture, woodTexture } from './textures'
+import { GeneratedMesh, generatedModel, generatedSize, type GeneratedModel } from './GeneratedMesh'
 
 const DESK_W = DESK_WIDTH_MM / 1000
 const DESK_D = 0.72
@@ -266,6 +259,7 @@ function MonitorMesh({
 function TowerMesh({
   part,
   gpu,
+  model,
   position,
   caseHot,
   gpuHot,
@@ -278,6 +272,7 @@ function TowerMesh({
 }: {
   part: ResolvedPart
   gpu?: ResolvedPart
+  model?: GeneratedModel
   position: [number, number, number]
   caseHot: boolean
   gpuHot: boolean
@@ -353,6 +348,37 @@ function TowerMesh({
   return (
     <group position={position}>
       <GroundShadow position={[0, 0.003, 0]} width={w * 1.3} depth={d * 1.05} />
+      {model ? (
+        <>
+          <Suspense fallback={null}>
+            <GeneratedMesh url={model.url} rotation={model.rotation} size={[w, h, d]} hot={caseHot} />
+          </Suspense>
+          <mesh
+            position={[0, h / 2, 0]}
+            onPointerOver={(event) => {
+              event.stopPropagation()
+              setOver(true)
+              onHover?.('case')
+            }}
+            onPointerOut={() => {
+              setOver(false)
+              onHover?.(null)
+            }}
+            onPointerDown={beginDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onClick={(event) => {
+              if (interactive || !onSelect || dragged(event)) return
+              event.stopPropagation()
+              onSelect('case')
+            }}
+          >
+            <boxGeometry args={[w, h, d]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </>
+      ) : (
+        <>
       {[
         [-1, -1],
         [1, -1],
@@ -444,6 +470,8 @@ function TowerMesh({
           depthWrite={false}
         />
       </mesh>
+        </>
+      )}
       {gpu && (
         <group position={[outward * (w / 2 - 0.02), h * 0.4, 0]}>
           <mesh castShadow raycast={() => null}>
@@ -691,6 +719,12 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
   const monitor = partOf(parts, 'monitor')
   const keyboard = partOf(parts, 'keyboard')
   const mouse = partOf(parts, 'mouse')
+  const headset = partOf(parts, 'headset')
+  const mouseModel = generatedModel(mouse?.id)
+  const headsetModel = generatedModel(headset?.id)
+  const monitorModel = generatedModel(monitor?.id)
+  const caseModel = generatedModel(tower?.id)
+  const keyboardModel = generatedModel(keyboard?.id)
   const interactive = !preview
   const hiddenSet = new Set(hidden)
 
@@ -774,18 +808,34 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         )
       })()}
       {show('monitor') && monitor && (
-        <MonitorMesh
-          part={monitor}
-          position={[monitorX, TOP, -0.2]}
-          hot={focus === 'monitor'}
-          onSelect={onSelect}
-          onHover={onHover}
-        />
+        monitorModel ? (
+          <Hotspot category="monitor" onSelect={onSelect} onHover={onHover}>
+            <group position={[monitorX, TOP, -0.2]}>
+              <Suspense fallback={null}>
+                <GeneratedMesh
+                  url={monitorModel.url}
+                  rotation={monitorModel.rotation}
+                  size={generatedSize('monitor', monitor)}
+                  hot={focus === 'monitor'}
+                />
+              </Suspense>
+            </group>
+          </Hotspot>
+        ) : (
+          <MonitorMesh
+            part={monitor}
+            position={[monitorX, TOP, -0.2]}
+            hot={focus === 'monitor'}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
+        )
       )}
       {show('case') && tower && (
         <TowerMesh
           part={tower}
           gpu={gpu}
+          model={caseModel}
           position={[towerX, TOP, towerZ]}
           caseHot={focus === 'case'}
           gpuHot={focus === 'gpu'}
@@ -798,32 +848,75 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         />
       )}
       {show('keyboard') && keyboard && (
-        <KeyboardMesh
-          part={keyboard}
-          position={[keyboardX, TOP, 0.16]}
-          hot={focus === 'keyboard'}
-          onSelect={onSelect}
-          onHover={onHover}
-        />
+        keyboardModel ? (
+          <Hotspot category="keyboard" onSelect={onSelect} onHover={onHover}>
+            <group position={[keyboardX, TOP, 0.16]}>
+              <Suspense fallback={null}>
+                <GeneratedMesh
+                  url={keyboardModel.url}
+                  rotation={keyboardModel.rotation}
+                  size={generatedSize('keyboard', keyboard)}
+                  hot={focus === 'keyboard'}
+                />
+              </Suspense>
+            </group>
+          </Hotspot>
+        ) : (
+          <KeyboardMesh
+            part={keyboard}
+            position={[keyboardX, TOP, 0.16]}
+            hot={focus === 'keyboard'}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
+        )
       )}
-      {show('mouse') && (
-        <MouseMesh
-          part={mouse}
-          position={[mouseX, TOP, 0.18]}
-          hot={focus === 'mouse'}
-          flip={mouseX < keyboardX}
-          onSelect={onSelect}
-          onHover={onHover}
-        />
-      )}
-      {show('headset') && (
-        <HeadsetMesh
-          position={[headsetX, TOP, 0.02]}
-          hot={focus === 'headset'}
-          onSelect={onSelect}
-          onHover={onHover}
-        />
-      )}
+      {show('mouse') &&
+        (mouseModel && mouse ? (
+          <Hotspot category="mouse" onSelect={onSelect} onHover={onHover}>
+            <group position={[mouseX, TOP, 0.18]} rotation={[0, mouseX < keyboardX ? Math.PI : 0, 0]}>
+              <Suspense fallback={null}>
+                <GeneratedMesh
+                  url={mouseModel.url}
+                  rotation={mouseModel.rotation}
+                  size={generatedSize('mouse', mouse)}
+                  hot={focus === 'mouse'}
+                />
+              </Suspense>
+            </group>
+          </Hotspot>
+        ) : (
+          <MouseMesh
+            part={mouse}
+            position={[mouseX, TOP, 0.18]}
+            hot={focus === 'mouse'}
+            flip={mouseX < keyboardX}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
+        ))}
+      {show('headset') &&
+        (headsetModel ? (
+          <Hotspot category="headset" onSelect={onSelect} onHover={onHover}>
+            <group position={[headsetX, TOP, 0.02]} rotation={[0, 0.6, 0]}>
+              <Suspense fallback={null}>
+                <GeneratedMesh
+                  url={headsetModel.url}
+                  rotation={headsetModel.rotation}
+                  size={generatedSize('headset', headset)}
+                  hot={focus === 'headset'}
+                />
+              </Suspense>
+            </group>
+          </Hotspot>
+        ) : (
+          <HeadsetMesh
+            position={[headsetX, TOP, 0.02]}
+            hot={focus === 'headset'}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
+        ))}
       {label && labelPos && (
         <Html position={labelPos} center distanceFactor={1.45} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
           <div className="part-card">
