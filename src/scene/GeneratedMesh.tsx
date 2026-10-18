@@ -7,6 +7,8 @@ export type GeneratedModel = {
   url: string
   /** Applied before the mesh is measured, so the thin axis sits on the desk. */
   rotation: [number, number, number]
+  /** Extra scale on the vertical axis after the mesh is fitted to the catalog size. */
+  thin?: number
 }
 
 export const GENERATED_MODELS: Record<string, GeneratedModel> = {
@@ -14,6 +16,7 @@ export const GENERATED_MODELS: Record<string, GeneratedModel> = {
   'hs-g335': { url: '/models/hs-g335.glb', rotation: [-Math.PI / 2, 0, 0] },
   'case-pop-air': { url: '/models/case-pop-air.glb', rotation: [0, 0, 0] },
   'mon-1440': { url: '/models/mon-1440.glb', rotation: [0, 0, 0] },
+  'kb-plain': { url: '/models/kb-plain.glb', rotation: [-Math.PI / 2, 0, 0], thin: 0.5 },
 }
 
 export function generatedModel(id: string | undefined): GeneratedModel | undefined {
@@ -26,11 +29,13 @@ export function GeneratedMesh({
   rotation,
   size,
   hot,
+  thin = 1,
 }: {
   url: string
   rotation: [number, number, number]
   size: [number, number, number]
   hot: boolean
+  thin?: number
 }) {
   const gltf = useGLTF(url)
   const object = useMemo(() => {
@@ -66,12 +71,13 @@ export function GeneratedMesh({
           ? depthScale
           : widthScale
     root.scale.multiplyScalar(scale)
+    if (thin !== 1) root.scale.y *= thin
     root.updateMatrixWorld(true)
     const fitted = new THREE.Box3().setFromObject(root)
     const center = fitted.getCenter(new THREE.Vector3())
     root.position.set(-center.x, -fitted.min.y, -center.z)
     return root
-  }, [gltf, hot, rotation, size])
+  }, [gltf, hot, rotation, size, thin])
 
   return <primitive object={object} />
 }
@@ -80,6 +86,7 @@ useGLTF.preload('/models/mouse-g305.glb')
 useGLTF.preload('/models/hs-g335.glb')
 useGLTF.preload('/models/case-pop-air.glb')
 useGLTF.preload('/models/mon-1440.glb')
+useGLTF.preload('/models/kb-plain.glb')
 
 export function generatedSize(category: Category, part?: { widthMm?: number; heightMm?: number; depthMm?: number }): [number, number, number] {
   if (category === 'headset') return [0.18, 0.09, 0.2]

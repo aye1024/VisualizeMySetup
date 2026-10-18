@@ -4,18 +4,10 @@ import { loadPhoto } from '../photo'
 import { readSetup, readSwaps, writeSetup } from '../query'
 import { referralUrl } from '../catalog'
 import { money, recommend } from '../recommend'
-import { SetupScene, type Hand, type HideKey, type SceneHandle } from '../scene/SetupScene'
+import { SetupScene, type DeskSpots, type SceneHandle } from '../scene/SetupScene'
 import type { Category } from '../types'
 import { Brand } from './Brand'
 import { PartsPanel } from './PartsPanel'
-
-const HIDES: Array<{ key: HideKey; label: string }> = [
-  { key: 'case', label: 'Tower' },
-  { key: 'monitor', label: 'Monitor' },
-  { key: 'keyboard', label: 'Keyboard' },
-  { key: 'mouse', label: 'Mouse' },
-  { key: 'headset', label: 'Headset' },
-]
 
 export function BuildPage() {
   const [params, setParams] = useSearchParams()
@@ -32,10 +24,7 @@ export function BuildPage() {
   const links = useRef<HTMLDialogElement>(null)
   const [selected, setSelected] = useState<Category>('gpu')
   const [hover, setHover] = useState<Category | null>(null)
-  const [hidden, setHidden] = useState<HideKey[]>([])
-  const [side, setSide] = useState<'left' | 'right'>('right')
-  const [dragX, setDragX] = useState<number | null>(null)
-  const [hand, setHand] = useState<Hand>('right')
+  const [spots, setSpots] = useState<DeskSpots>({})
   const [toast, setToast] = useState('')
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -75,10 +64,6 @@ export function BuildPage() {
     }
   }
 
-  function toggleHide(key: HideKey) {
-    setHidden((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
-  }
-
   const showPhoto = Boolean(photo) && !dropped
 
   return (
@@ -110,73 +95,31 @@ export function BuildPage() {
               ref={scene}
               parts={build.parts}
               active={hover ?? selected}
-              hidden={hidden}
-              side={side}
-              dragX={dragX}
-              hand={hand}
+              hidden={[]}
+              side="right"
+              hand="right"
+              spots={spots}
               studio={!showPhoto}
               reducedMotion={reducedMotion}
               onSelect={setSelected}
               onHover={setHover}
-              onSide={(next) => {
-                setSide(next)
-                setDragX(null)
-              }}
-              onDragX={setDragX}
+              onPlace={(key, x, z) => setSpots((current) => ({ ...current, [key]: { x, z } }))}
             />
           </div>
           <div className="stage-ui">
             <p className="desk-note">{dropped ? 'The photo could not be kept in this browser. This is the neutral desk.' : build.deskNote}</p>
             <div className="controls">
-              <button type="button" onClick={() => scene.current?.nudge('rot')}>
-                Rotate
-              </button>
-              <button type="button" onClick={() => scene.current?.nudge('in')}>
-                Zoom in
-              </button>
-              <button type="button" onClick={() => scene.current?.nudge('out')}>
-                Zoom out
-              </button>
-              <button type="button" onClick={() => scene.current?.nudge('reset')}>
-                Reset view
-              </button>
               <button
                 type="button"
                 onClick={() => {
-                  setSide('left')
-                  setDragX(null)
+                  setSpots({})
+                  scene.current?.resetView()
                 }}
               >
-                Tower left
+                Default view
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSide('right')
-                  setDragX(null)
-                }}
-              >
-                Tower right
-              </button>
-              <button type="button" onClick={() => setHand((current) => (current === 'right' ? 'left' : 'right'))}>
-                Mouse {hand}
-              </button>
-              {HIDES.map((item) => {
-                const off = hidden.includes(item.key)
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    aria-pressed={!off}
-                    className={off ? 'is-off' : ''}
-                    onClick={() => toggleHide(item.key)}
-                  >
-                    {off ? `Show ${item.label.toLowerCase()}` : item.label}
-                  </button>
-                )
-              })}
             </div>
-            <p className="drag-hint">Drag to look. Drag the tower sideways, or click the desk to pick a side.</p>
+            <p className="drag-hint">Drag empty space to look. Drag a part to slide it across the desk.</p>
           </div>
         </section>
 

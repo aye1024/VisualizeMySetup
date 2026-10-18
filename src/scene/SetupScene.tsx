@@ -1,6 +1,6 @@
 import { Html, OrbitControls, RoundedBox, useCursor } from '@react-three/drei'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { Suspense, forwardRef, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { Suspense, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import * as THREE from 'three'
 import { DESK_WIDTH_MM, referralUrl } from '../catalog'
 import { money } from '../recommend'
@@ -16,8 +16,10 @@ const HOME_TARGET = new THREE.Vector3(0, 0.68, 0)
 
 export type HideKey = 'case' | 'monitor' | 'keyboard' | 'mouse' | 'headset'
 export type Hand = 'left' | 'right'
+export type DeskSpot = { x: number; z: number }
+export type DeskSpots = Partial<Record<HideKey, DeskSpot>>
 export type SceneHandle = {
-  nudge: (action: 'in' | 'out' | 'rot' | 'reset') => void
+  resetView: () => void
 }
 
 type OrbitHandle = {
@@ -32,15 +34,14 @@ type Props = {
   active: Category | null
   hidden: HideKey[]
   side: 'left' | 'right'
-  dragX: number | null
   hand: Hand
+  spots?: DeskSpots
   studio: boolean
   preview?: boolean
   reducedMotion?: boolean
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
-  onSide?: (side: 'left' | 'right') => void
-  onDragX?: (x: number) => void
+  onPlace?: (key: HideKey, x: number, z: number) => void
 }
 
 function partOf(parts: ResolvedPart[], category: Category) {
@@ -61,47 +62,14 @@ function anchorOf(category: Category): HideKey | 'gpu' {
   return 'case'
 }
 
-function Hotspot({
-  category,
-  onSelect,
-  onHover,
-  children,
-}: {
-  category: Category
-  onSelect?: (category: Category) => void
-  onHover?: (category: Category | null) => void
-  children: ReactNode
-}) {
-  const [over, setOver] = useState(false)
-  useCursor(over && Boolean(onSelect))
-  return (
-    <group
-      onPointerOver={(event) => {
-        event.stopPropagation()
-        setOver(true)
-        onHover?.(category)
-      }}
-      onPointerOut={(event) => {
-        event.stopPropagation()
-        setOver(false)
-        onHover?.(null)
-      }}
-      onPointerDown={(event) => {
-        rememberPointer(event)
-        event.stopPropagation()
-      }}
-      onClick={(event) => {
-        if (!onSelect || dragged(event)) return
-        event.stopPropagation()
-        onSelect(category)
-      }}
-    >
-      {children}
-    </group>
-  )
-}
-
 const pointerStart = { x: 0, y: 0 }
+let deskDragging = false
+const dragWatchers = new Set<(dragging: boolean) => void>()
+
+function setDeskDragging(dragging: boolean) {
+  deskDragging = dragging
+  for (const watch of dragWatchers) watch(dragging)
+}
 
 function rememberPointer(event: ThreeEvent<PointerEvent>) {
   pointerStart.x = event.clientX
@@ -112,6 +80,107 @@ function dragged(event: ThreeEvent<MouseEvent>) {
   const dx = event.clientX - pointerStart.x
   const dy = event.clientY - pointerStart.y
   return dx * dx + dy * dy > 25
+}
+
+function useDeskDrag(
+  controls: RefObject<OrbitHandle | null> | undefined,
+  onPlace: ((x: number, z: number) => void) | undefined,
+  onClick: (() => void) | undefined,
+) {
+  const gl = useThree((state) => state.gl)
+  const camera = useThree((state) => state.camera)
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), -TOP), [])
+  const hit = useMemo(() => new THREE.Vector3(), [])
+  const ndc = useMemo(() => new THREE.Vector2(), [])
+  const raycaster = useMemo(() => new THREE.Raycaster(), [])
+  const cleanup = useRef<(() => void) | null>(null)
+
+  useEffect(() => () => cleanup.current?.(), [])
+
+  const onDown = (event: ThreeEvent<PointerEvent>) => {
+    rememberPointer(event)
+    event.stopPropagation()
+    if (!onPlace) return
+    let moved = false
+    if (controls?.current) controls.current.enabled = false
+    setDeskDragging(true)
+    try {
+      gl.domElement.setPointerCapture(event.pointerId)
+    } catch {
+      /* pointer already released */
+    }
+    const move = (native: PointerEvent) => {
+      const dx = native.clientX - pointerStart.x
+      const dy = native.clientY - pointerStart.y
+      if (dx * dx + dy * dy > 16) moved = true
+      const rect = gl.domElement.getBoundingClientRect()
+      ndc.set(((native.clientX - rect.left) / rect.width) * 2 - 1, -((native.clientY - rect.top) / rect.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, camera)
+      if (raycaster.ray.intersectPlane(plane, hit)) onPlace(hit.x, hit.z)
+    }
+    const up = (native: PointerEvent) => {
+      cleanup.current = null
+      gl.domElement.removeEventListener('pointermove', move)
+      gl.domElement.removeEventListener('pointerup', up)
+      try {
+        if (gl.domElement.hasPointerCapture(native.pointerId)) gl.domElement.releasePointerCapture(native.pointerId)
+      } catch {
+        /* already released */
+      }
+      if (controls?.current) controls.current.enabled = true
+      setDeskDragging(false)
+      if (!moved) onClick?.()
+    }
+    cleanup.current = up
+    gl.domElement.addEventListener('pointermove', move)
+    gl.domElement.addEventListener('pointerup', up)
+  }
+
+  return onDown
+}
+
+function Hotspot({
+  category,
+  onSelect,
+  onHover,
+  controls,
+  onPlace,
+  children,
+}: {
+  category: Category
+  onSelect?: (category: Category) => void
+  onHover?: (category: Category | null) => void
+  controls?: RefObject<OrbitHandle | null>
+  onPlace?: (x: number, z: number) => void
+  children: ReactNode
+}) {
+  const [over, setOver] = useState(false)
+  const onDown = useDeskDrag(controls, onPlace, onSelect ? () => onSelect(category) : undefined)
+  useCursor(over && Boolean(onSelect))
+  return (
+    <group
+      onPointerOver={(event) => {
+        event.stopPropagation()
+        if (deskDragging) return
+        setOver(true)
+        onHover?.(category)
+      }}
+      onPointerOut={(event) => {
+        event.stopPropagation()
+        if (deskDragging) return
+        setOver(false)
+        onHover?.(null)
+      }}
+      onPointerDown={onDown}
+      onClick={(event) => {
+        if (!onSelect || dragged(event)) return
+        event.stopPropagation()
+        onSelect(category)
+      }}
+    >
+      {children}
+    </group>
+  )
 }
 
 function GroundShadow({
@@ -137,15 +206,7 @@ function GroundShadow({
   )
 }
 
-function Desk({
-  studio,
-  interactive,
-  onSide,
-}: {
-  studio: boolean
-  interactive: boolean
-  onSide?: (side: 'left' | 'right') => void
-}) {
+function Desk({ studio }: { studio: boolean }) {
   const wood = woodTexture()
   return (
     <group>
@@ -161,19 +222,7 @@ function Desk({
           </mesh>
         </>
       )}
-      <mesh
-        position={[0, TOP - 0.016, 0]}
-        castShadow
-        receiveShadow
-        onPointerDown={(event) => {
-          rememberPointer(event)
-        }}
-        onClick={(event) => {
-          if (!interactive || !onSide || dragged(event)) return
-          event.stopPropagation()
-          onSide(event.point.x < 0 ? 'left' : 'right')
-        }}
-      >
+      <mesh position={[0, TOP - 0.016, 0]} castShadow receiveShadow>
         <boxGeometry args={[DESK_W, 0.032, DESK_D]} />
         <meshStandardMaterial map={wood} roughness={0.78} metalness={0.02} color="#f3d2b0" />
       </mesh>
@@ -200,12 +249,16 @@ function MonitorMesh({
   part,
   position,
   hot,
+  controls,
+  onPlace,
   onSelect,
   onHover,
 }: {
   part: ResolvedPart
   position: [number, number, number]
   hot: boolean
+  controls?: RefObject<OrbitHandle | null>
+  onPlace?: (x: number, z: number) => void
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
 }) {
@@ -214,7 +267,7 @@ function MonitorMesh({
   const stand = 0.078
   const thick = Math.min(0.04, Math.max(0.022, ((part.depthMm ?? 50) / 1000) * 0.55))
   return (
-    <Hotspot category="monitor" onSelect={onSelect} onHover={onHover}>
+    <Hotspot category="monitor" onSelect={onSelect} onHover={onHover} controls={controls} onPlace={onPlace}>
       <group position={position}>
         <GroundShadow position={[0, 0.004, 0.02]} width={w * 0.72} depth={0.16} />
         <mesh position={[0, 0.008, 0.01]} receiveShadow>
@@ -268,7 +321,7 @@ function TowerMesh({
   controls,
   onSelect,
   onHover,
-  onDragX,
+  onPlace,
 }: {
   part: ResolvedPart
   gpu?: ResolvedPart
@@ -281,19 +334,15 @@ function TowerMesh({
   controls: RefObject<OrbitHandle | null>
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
-  onDragX?: (x: number) => void
+  onPlace?: (x: number, z: number) => void
 }) {
   const w = (part.widthMm ?? 210) / 1000
   const h = (part.heightMm ?? 450) / 1000
   const d = (part.depthMm ?? 420) / 1000
   const style = part.scene
-  const gl = useThree((state) => state.gl)
-  const dragging = useRef(false)
-  const moved = useRef(false)
-  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), -TOP), [])
-  const hit = useMemo(() => new THREE.Vector3(), [])
   const [over, setOver] = useState(false)
-  useCursor((over || dragging.current) && Boolean(onSelect))
+  const onDown = useDeskDrag(controls, onPlace, onSelect ? () => onSelect('case') : undefined)
+  useCursor(over && Boolean(onSelect))
   const strip = useRef<THREE.MeshStandardMaterial>(null)
   const led = useRef<THREE.MeshStandardMaterial>(null)
   useFrame(({ clock }) => {
@@ -307,43 +356,6 @@ function TowerMesh({
   const accent = gpu?.scene === 'amd' ? '#e23b32' : '#7cff4a'
   const body = style === 'silent' ? '#3c4148' : '#171a1f'
   const slots = style !== 'silent'
-
-  const beginDrag = (event: ThreeEvent<PointerEvent>) => {
-    event.stopPropagation()
-    rememberPointer(event)
-    if (!interactive) return
-    moved.current = false
-    dragging.current = true
-    if (controls.current) controls.current.enabled = false
-    try {
-      gl.domElement.setPointerCapture(event.pointerId)
-    } catch {
-      /* pointer already released */
-    }
-  }
-
-  const moveDrag = (event: ThreeEvent<PointerEvent>) => {
-    if (!dragging.current) return
-    event.stopPropagation()
-    const dx = event.clientX - pointerStart.x
-    const dy = event.clientY - pointerStart.y
-    if (dx * dx + dy * dy > 16) moved.current = true
-    if (event.ray.intersectPlane(plane, hit)) onDragX?.(hit.x)
-  }
-
-  const endDrag = (event: ThreeEvent<PointerEvent>) => {
-    if (!dragging.current) return
-    dragging.current = false
-    if (controls.current) controls.current.enabled = true
-    try {
-      if (gl.domElement.hasPointerCapture(event.pointerId)) {
-        gl.domElement.releasePointerCapture(event.pointerId)
-      }
-    } catch {
-      /* already released */
-    }
-    if (!moved.current) onSelect?.('case')
-  }
 
   return (
     <group position={position}>
@@ -364,9 +376,7 @@ function TowerMesh({
               setOver(false)
               onHover?.(null)
             }}
-            onPointerDown={beginDrag}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
+            onPointerDown={onDown}
             onClick={(event) => {
               if (interactive || !onSelect || dragged(event)) return
               event.stopPropagation()
@@ -413,9 +423,7 @@ function TowerMesh({
             setOver(false)
             onHover?.(null)
           }}
-          onPointerDown={beginDrag}
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
+          onPointerDown={onDown}
           onClick={(event) => {
             if (interactive || !onSelect || dragged(event)) return
             event.stopPropagation()
@@ -526,12 +534,16 @@ function KeyboardMesh({
   part,
   position,
   hot,
+  controls,
+  onPlace,
   onSelect,
   onHover,
 }: {
   part: ResolvedPart
   position: [number, number, number]
   hot: boolean
+  controls?: RefObject<OrbitHandle | null>
+  onPlace?: (x: number, z: number) => void
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
 }) {
@@ -560,7 +572,7 @@ function KeyboardMesh({
     [hot],
   )
   return (
-    <Hotspot category="keyboard" onSelect={onSelect} onHover={onHover}>
+    <Hotspot category="keyboard" onSelect={onSelect} onHover={onHover} controls={controls} onPlace={onPlace}>
       <group position={position} rotation={[-0.04, 0, 0]}>
         <mesh position={[0, h / 2, 0]} castShadow material={[side, side, top, side, side, side]}>
           <boxGeometry args={[w, h, d]} />
@@ -575,6 +587,8 @@ function MouseMesh({
   position,
   hot,
   flip,
+  controls,
+  onPlace,
   onSelect,
   onHover,
 }: {
@@ -582,6 +596,8 @@ function MouseMesh({
   position: [number, number, number]
   hot: boolean
   flip: boolean
+  controls?: RefObject<OrbitHandle | null>
+  onPlace?: (x: number, z: number) => void
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
 }) {
@@ -589,7 +605,7 @@ function MouseMesh({
   const h = (part?.heightMm ?? 40) / 1000
   const d = (part?.depthMm ?? 120) / 1000
   return (
-    <Hotspot category="mouse" onSelect={onSelect} onHover={onHover}>
+    <Hotspot category="mouse" onSelect={onSelect} onHover={onHover} controls={controls} onPlace={onPlace}>
       <group position={position} rotation={[0, flip ? Math.PI : 0, 0]}>
         <mesh position={[0, h / 2, 0]} castShadow scale={[w / 0.056, h / 0.056, d / 0.056]}>
           <sphereGeometry args={[0.028, 24, 16]} />
@@ -613,11 +629,15 @@ function MouseMesh({
 function HeadsetMesh({
   position,
   hot,
+  controls,
+  onPlace,
   onSelect,
   onHover,
 }: {
   position: [number, number, number]
   hot: boolean
+  controls?: RefObject<OrbitHandle | null>
+  onPlace?: (x: number, z: number) => void
   onSelect?: (category: Category) => void
   onHover?: (category: Category | null) => void
 }) {
@@ -633,7 +653,7 @@ function HeadsetMesh({
   }, [])
   const color = hot ? '#4a3028' : '#262a30'
   return (
-    <Hotspot category="headset" onSelect={onSelect} onHover={onHover}>
+    <Hotspot category="headset" onSelect={onSelect} onHover={onHover} controls={controls} onPlace={onPlace}>
       <group position={position} rotation={[0, 0.4, 0]}>
         <GroundShadow position={[0, 0.002, 0.03]} width={0.22} depth={0.16} />
         <mesh geometry={band} castShadow>
@@ -704,14 +724,13 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
     active,
     hidden,
     side,
-    dragX,
     hand,
+    spots,
     studio,
     preview,
     onSelect,
     onHover,
-    onSide,
-    onDragX,
+    onPlace,
     controls,
   } = props
   const tower = partOf(parts, 'case')
@@ -727,29 +746,59 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
   const keyboardModel = generatedModel(keyboard?.id)
   const interactive = !preview
   const hiddenSet = new Set(hidden)
+  const [dragging, setDragging] = useState(false)
+  useEffect(() => {
+    dragWatchers.add(setDragging)
+    return () => {
+      dragWatchers.delete(setDragging)
+    }
+  }, [])
 
   const towerW = (tower?.widthMm ?? 210) / 1000
   const towerD = (tower?.depthMm ?? 420) / 1000
   const minX = -DESK_W / 2 + towerW / 2 + 0.03
   const maxX = DESK_W / 2 - towerW / 2 - 0.03
-  const towerX = THREE.MathUtils.clamp(dragX ?? (side === 'right' ? maxX - 0.01 : minX + 0.01), minX, maxX)
-  const towerZ = Math.min(-0.02, DESK_D / 2 - towerD / 2 - 0.04)
+  const towerX0 = side === 'right' ? maxX - 0.01 : minX + 0.01
+  const towerZ0 = Math.min(-0.02, DESK_D / 2 - towerD / 2 - 0.04)
 
   const deskLeft = -DESK_W / 2 + 0.03
   const deskRight = DESK_W / 2 - 0.03
-  const zoneLeft = towerX >= 0 ? deskLeft : Math.max(deskLeft, towerX + towerW / 2 + 0.04)
-  const zoneRight = towerX >= 0 ? Math.min(deskRight, towerX - towerW / 2 - 0.04) : deskRight
+  const zoneLeft = towerX0 >= 0 ? deskLeft : Math.max(deskLeft, towerX0 + towerW / 2 + 0.04)
+  const zoneRight = towerX0 >= 0 ? Math.min(deskRight, towerX0 - towerW / 2 - 0.04) : deskRight
   const monitorW = (monitor?.widthMm ?? 614) / 1000
-  const monitorX = THREE.MathUtils.clamp((zoneLeft + zoneRight) / 2, zoneLeft + monitorW / 2, zoneRight - monitorW / 2)
+  const monitorD = Math.max((monitor?.depthMm ?? 80) / 1000, 0.2)
+  const monitorX0 = THREE.MathUtils.clamp((zoneLeft + zoneRight) / 2, zoneLeft + monitorW / 2, zoneRight - monitorW / 2)
   const kbW = (keyboard?.widthMm ?? 360) / 1000
-  const keyboardX = THREE.MathUtils.clamp(monitorX, zoneLeft + kbW / 2, zoneRight - kbW / 2)
+  const kbD = (keyboard?.depthMm ?? 145) / 1000
+  const keyboardX0 = THREE.MathUtils.clamp(monitorX0, zoneLeft + kbW / 2, zoneRight - kbW / 2)
   const mouseW = (mouse?.widthMm ?? 65) / 1000
+  const mouseD = (mouse?.depthMm ?? 120) / 1000
   const mouseGap = kbW / 2 + mouseW / 2 + 0.03
   const prefer = hand === 'right' ? 1 : -1
-  let mouseX = keyboardX + prefer * mouseGap
-  const mouseFits = mouseX > zoneLeft + 0.04 && mouseX < zoneRight - 0.04
-  if (!mouseFits) mouseX = keyboardX - prefer * mouseGap
-  const headsetX = towerX >= 0 ? deskLeft + 0.12 : deskRight - 0.12
+  let mouseX0 = keyboardX0 + prefer * mouseGap
+  const mouseFits = mouseX0 > zoneLeft + 0.04 && mouseX0 < zoneRight - 0.04
+  if (!mouseFits) mouseX0 = keyboardX0 - prefer * mouseGap
+  const headsetX0 = towerX0 >= 0 ? deskLeft + 0.12 : deskRight - 0.12
+
+  const settle = (key: HideKey, x: number, z: number, halfW: number, halfD: number): [number, number] => {
+    const spot = spots?.[key]
+    return [
+      THREE.MathUtils.clamp(spot?.x ?? x, -DESK_W / 2 + halfW + 0.02, DESK_W / 2 - halfW - 0.02),
+      THREE.MathUtils.clamp(spot?.z ?? z, -DESK_D / 2 + halfD + 0.02, DESK_D / 2 - halfD - 0.02),
+    ]
+  }
+  const [towerX, towerZ] = settle('case', towerX0, towerZ0, towerW / 2, towerD / 2)
+  const [monitorX, monitorZ] = settle('monitor', monitorX0, -0.2, monitorW / 2, monitorD / 2)
+  const [keyboardX, keyboardZ] = settle('keyboard', keyboardX0, 0.16, kbW / 2, kbD / 2)
+  const [mouseX, mouseZ] = settle('mouse', mouseX0, 0.18, mouseW / 2, mouseD / 2)
+  const [headsetX, headsetZ] = settle('headset', headsetX0, 0.02, 0.1, 0.1)
+  const slide = (key: HideKey, x: number, z: number, halfW: number, halfD: number) => {
+    onPlace?.(
+      key,
+      THREE.MathUtils.clamp(x, -DESK_W / 2 + halfW + 0.02, DESK_W / 2 - halfW - 0.02),
+      THREE.MathUtils.clamp(z, -DESK_D / 2 + halfD + 0.02, DESK_D / 2 - halfD - 0.02),
+    )
+  }
   const focus = active ? anchorOf(active) : null
   const show = (key: HideKey) => !hiddenSet.has(key)
 
@@ -760,10 +809,10 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
     const visible =
       anchor === 'gpu' || anchor === 'case' ? show('case') : show(anchor)
     if (visible) {
-      if (anchor === 'monitor') labelPos = [monitorX, TOP + 0.078 + (monitor?.heightMm ?? 350) / 1000 + 0.06, -0.2]
-      else if (anchor === 'keyboard') labelPos = [keyboardX, TOP + 0.1, 0.16]
-      else if (anchor === 'mouse') labelPos = [mouseX, TOP + (mouse?.heightMm ?? 40) / 1000 + 0.08, 0.18]
-      else if (anchor === 'headset') labelPos = [headsetX, TOP + 0.12, 0.02]
+      if (anchor === 'monitor') labelPos = [monitorX, TOP + 0.078 + (monitor?.heightMm ?? 350) / 1000 + 0.06, monitorZ]
+      else if (anchor === 'keyboard') labelPos = [keyboardX, TOP + 0.1, keyboardZ]
+      else if (anchor === 'mouse') labelPos = [mouseX, TOP + (mouse?.heightMm ?? 40) / 1000 + 0.08, mouseZ]
+      else if (anchor === 'headset') labelPos = [headsetX, TOP + 0.12, headsetZ]
       else labelPos = [towerX, TOP + (tower?.heightMm ?? 450) / 1000 + 0.08, towerZ]
     }
   }
@@ -787,12 +836,8 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
       />
       <directionalLight position={[-2.4, 1.8, -1.4]} intensity={0.55} color="#c5d4ff" />
       <pointLight position={[0.1, 1.7, 0.5]} intensity={6} distance={5} decay={2} color="#ffe0bf" />
-      <Desk studio={studio} interactive={interactive} onSide={onSide} />
+      <Desk studio={studio} />
       {show('keyboard') && keyboard && (() => {
-        const kbD = (keyboard.depthMm ?? 145) / 1000
-        const mouseD = (mouse?.depthMm ?? 120) / 1000
-        const keyboardZ = 0.16
-        const mouseZ = 0.18
         const spanLeft = Math.min(keyboardX - kbW / 2, mouseX - mouseW / 2)
         const spanRight = Math.max(keyboardX + kbW / 2, mouseX + mouseW / 2)
         const spanBack = Math.min(keyboardZ - kbD / 2, mouseZ - mouseD / 2)
@@ -809,8 +854,14 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
       })()}
       {show('monitor') && monitor && (
         monitorModel ? (
-          <Hotspot category="monitor" onSelect={onSelect} onHover={onHover}>
-            <group position={[monitorX, TOP, -0.2]}>
+          <Hotspot
+            category="monitor"
+            onSelect={onSelect}
+            onHover={onHover}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('monitor', x, z, monitorW / 2, monitorD / 2) : undefined}
+          >
+            <group position={[monitorX, TOP, monitorZ]}>
               <Suspense fallback={null}>
                 <GeneratedMesh
                   url={monitorModel.url}
@@ -824,8 +875,10 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         ) : (
           <MonitorMesh
             part={monitor}
-            position={[monitorX, TOP, -0.2]}
+            position={[monitorX, TOP, monitorZ]}
             hot={focus === 'monitor'}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('monitor', x, z, monitorW / 2, monitorD / 2) : undefined}
             onSelect={onSelect}
             onHover={onHover}
           />
@@ -844,18 +897,25 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
           controls={controls}
           onSelect={onSelect}
           onHover={onHover}
-          onDragX={onDragX}
+          onPlace={interactive ? (x, z) => slide('case', x, z, towerW / 2, towerD / 2) : undefined}
         />
       )}
       {show('keyboard') && keyboard && (
         keyboardModel ? (
-          <Hotspot category="keyboard" onSelect={onSelect} onHover={onHover}>
-            <group position={[keyboardX, TOP, 0.16]}>
+          <Hotspot
+            category="keyboard"
+            onSelect={onSelect}
+            onHover={onHover}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('keyboard', x, z, kbW / 2, kbD / 2) : undefined}
+          >
+            <group position={[keyboardX, TOP, keyboardZ]}>
               <Suspense fallback={null}>
                 <GeneratedMesh
                   url={keyboardModel.url}
                   rotation={keyboardModel.rotation}
                   size={generatedSize('keyboard', keyboard)}
+                  thin={keyboardModel.thin}
                   hot={focus === 'keyboard'}
                 />
               </Suspense>
@@ -864,8 +924,10 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         ) : (
           <KeyboardMesh
             part={keyboard}
-            position={[keyboardX, TOP, 0.16]}
+            position={[keyboardX, TOP, keyboardZ]}
             hot={focus === 'keyboard'}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('keyboard', x, z, kbW / 2, kbD / 2) : undefined}
             onSelect={onSelect}
             onHover={onHover}
           />
@@ -873,8 +935,14 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
       )}
       {show('mouse') &&
         (mouseModel && mouse ? (
-          <Hotspot category="mouse" onSelect={onSelect} onHover={onHover}>
-            <group position={[mouseX, TOP, 0.18]} rotation={[0, mouseX < keyboardX ? Math.PI : 0, 0]}>
+          <Hotspot
+            category="mouse"
+            onSelect={onSelect}
+            onHover={onHover}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('mouse', x, z, mouseW / 2, mouseD / 2) : undefined}
+          >
+            <group position={[mouseX, TOP, mouseZ]} rotation={[0, mouseX < keyboardX ? Math.PI : 0, 0]}>
               <Suspense fallback={null}>
                 <GeneratedMesh
                   url={mouseModel.url}
@@ -888,17 +956,25 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
         ) : (
           <MouseMesh
             part={mouse}
-            position={[mouseX, TOP, 0.18]}
+            position={[mouseX, TOP, mouseZ]}
             hot={focus === 'mouse'}
             flip={mouseX < keyboardX}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('mouse', x, z, mouseW / 2, mouseD / 2) : undefined}
             onSelect={onSelect}
             onHover={onHover}
           />
         ))}
       {show('headset') &&
         (headsetModel ? (
-          <Hotspot category="headset" onSelect={onSelect} onHover={onHover}>
-            <group position={[headsetX, TOP, 0.02]} rotation={[0, 0.6, 0]}>
+          <Hotspot
+            category="headset"
+            onSelect={onSelect}
+            onHover={onHover}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('headset', x, z, 0.1, 0.1) : undefined}
+          >
+            <group position={[headsetX, TOP, headsetZ]} rotation={[0, 0.6, 0]}>
               <Suspense fallback={null}>
                 <GeneratedMesh
                   url={headsetModel.url}
@@ -911,14 +987,16 @@ function Stage(props: Props & { controls: RefObject<OrbitHandle | null>; spinnin
           </Hotspot>
         ) : (
           <HeadsetMesh
-            position={[headsetX, TOP, 0.02]}
+            position={[headsetX, TOP, headsetZ]}
             hot={focus === 'headset'}
+            controls={controls}
+            onPlace={interactive ? (x, z) => slide('headset', x, z, 0.1, 0.1) : undefined}
             onSelect={onSelect}
             onHover={onHover}
           />
         ))}
-      {label && labelPos && (
-        <Html position={labelPos} center distanceFactor={1.45} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+      {label && labelPos && !dragging && (
+        <Html key={`${label.id}:${labelPos.join(',')}`} position={labelPos} center style={{ pointerEvents: 'none' }}>
           <div className="part-card">
             <strong>{label.name}</strong>
             <span>{money(label.price)}</span>
@@ -939,21 +1017,11 @@ export const SetupScene = forwardRef<SceneHandle, Props>(function SetupScene(pro
   const [spinning, setSpinning] = useState(Boolean(props.preview) && !props.reducedMotion)
 
   useImperativeHandle(ref, () => ({
-    nudge(action) {
+    resetView() {
       const orbit = controls.current
       if (!orbit) return
-      if (action === 'reset') {
-        orbit.object.position.copy(HOME_POS)
-        orbit.target.copy(HOME_TARGET)
-        orbit.update()
-        return
-      }
-      const offset = orbit.object.position.clone().sub(orbit.target)
-      if (action === 'rot') offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.4)
-      if (action === 'in') offset.multiplyScalar(0.8)
-      if (action === 'out') offset.multiplyScalar(1.22)
-      offset.setLength(THREE.MathUtils.clamp(offset.length(), 0.9, 3.2))
-      orbit.object.position.copy(orbit.target).add(offset)
+      orbit.object.position.copy(HOME_POS)
+      orbit.target.copy(HOME_TARGET)
       orbit.update()
     },
   }))

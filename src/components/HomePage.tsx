@@ -218,7 +218,6 @@ export function HomePage() {
               active={picked}
               hidden={[]}
               side="right"
-              dragX={null}
               hand="right"
               studio={!photo}
               preview
