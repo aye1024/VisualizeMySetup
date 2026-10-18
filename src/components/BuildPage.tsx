@@ -32,13 +32,6 @@ export function BuildPage() {
   )
 
   useEffect(() => {
-    document.title = `${build.variantLabel} · VisualizeMySetup`
-    return () => {
-      document.title = 'VisualizeMySetup'
-    }
-  }, [build.variantLabel])
-
-  useEffect(() => {
     document.getElementById(`part-${selected}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [selected])
 

@@ -6,6 +6,7 @@
   --line: rgba(255, 255, 255, 0.14);
   --accent: #ff4d1a;
   --accent-deep: #ff6a3d;
+  --accent-ink: #ff8c5a;
   --good: #3dd68c;
   --bad: #ff7a59;
   --stage: #000;
@@ -53,7 +54,7 @@ h1, h2, p { margin: 0; }
   text-decoration: none;
   text-transform: uppercase;
 }
-.logo span { color: var(--accent); }
+.logo span { color: var(--accent-ink); }
 
 .primary, .ghost, .texty, .presets button, .segment button, .controls button, .tabs button {
   border-radius: 999px;
@@ -99,7 +100,7 @@ h1, h2, p { margin: 0; }
   text-transform: uppercase;
   font-size: 0.75rem;
   font-weight: 650;
-  color: var(--accent);
+  color: var(--accent-ink);
   margin-bottom: 0.7rem;
 }
 h1 {
@@ -314,7 +315,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
 .part-actions { padding: 0 0.75rem 0.75rem; display: grid; gap: 0.35rem; }
 .part-actions a {
   justify-self: start;
-  color: var(--accent-deep);
+  color: var(--accent-ink);
   font-weight: 650;
 }
 .alts { display: grid; gap: 0.3rem; }
@@ -353,7 +354,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
 .sheet h2 { font-weight: 800; font-size: 1.6rem; letter-spacing: -0.03em; text-transform: uppercase; }
 .sheet ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
 .sheet li { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--line); padding-top: 0.45rem; }
-.sheet a { color: var(--accent-deep); font-weight: 650; }
+.sheet a { color: var(--accent-ink); font-weight: 650; }
 .sheet em { font-style: normal; white-space: nowrap; }
 .sheet-total { font-weight: 650; }
 .toast {
@@ -391,14 +392,14 @@ fieldset { border: 0; padding: 0; margin: 0; }
   letter-spacing: -0.03em;
 }
 .part-card a {
-  color: #c2410c;
+  color: #e06a32;
   font-size: 0.78rem;
   font-weight: 750;
   text-decoration: none;
   pointer-events: auto;
 }
 .preview-foot a {
-  color: var(--accent-deep);
+  color: var(--accent-ink);
   font-weight: 700;
 }
 
